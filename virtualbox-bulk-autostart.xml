@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<!DOCTYPE service_bundle SYSTEM "/usr/share/lib/xml/dtd/service_bundle.dtd.1">
+<!--
+# Solaris SMF service manifest for VirtualBox autostart service.
+-->
+
+<service_bundle type='manifest' name='SUNWvbox:autostart'>
+
+<service
+    name='application/virtualbox/bulk-autostart'
+    type='service'
+    version='1'>
+
+    <single_instance />
+
+    <dependency
+        name='VirtualBox Webservice'
+        grouping='require_all'
+        restart_on='none'
+        type='service'>
+            <service_fmri value='svc:/application/virtualbox/webservice:default' />
+    </dependency>
+
+    <instance name='default' enabled='true'>
+
+        <exec_method
+            type='method'
+            name='start'
+	    exec='/usr/sbin/virtualbox-bulk-autostart %m'
+            timeout_seconds='15'>
+            <method_context>
+                <method_credential user='root' group='root' />
+            </method_context>
+        </exec_method>
+
+        <exec_method
+            type='method'
+            name='stop'
+	    exec='/usr/sbin/virtualbox-bulk-autostart %m'
+            timeout_seconds='0'>
+            <method_context>
+                <method_credential user='root' group='root' />
+            </method_context>
+        </exec_method>
+
+        <property_group type="framework" name="startd">
+            <propval type="astring" name="duration" value="transient"/>
+        </property_group>
+
+        <template>
+            <common_name>
+                <loctext xml:lang='C'>
+                    VirtualBox Bulk Autostart
+                </loctext>
+            </common_name>
+        </template>
+
+    </instance>
+
+    <stability value='External' />
+
+</service>
+
+</service_bundle>

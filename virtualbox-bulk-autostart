@@ -1,0 +1,97 @@
+#!/bin/bash
+
+verifysmap () {
+	sxadm status|grep -q smap
+	if [[ "$?" == "0" ]]; then
+		sxadm status smap|grep -q disabled
+		if [[ "$?" != "0" ]]; then
+			echo "Error: SMAP (Supervisor Mode Access Prevention) is not disabled"
+			exit 1
+		fi
+	fi
+}
+
+startcmd () {
+	_COUNTDOWN=15
+	while :;
+	do
+		VBoxManage list vms >/dev/null 2>&1 && _READY=true || _READY=false
+		if ${_READY}; then
+			VBoxManage list vms|grep -q "\"<inaccessible>\"" && _READY=false || _READY=true
+		fi
+
+		if ${_READY}; then
+			break
+		elif (( ${_COUNTDOWN} >= 0 )); then
+			((_COUNTDOWN-=1))
+			sleep 1s
+		else
+			echo "Timeout reached!!"
+			exit 1
+		fi
+	done
+	IFS=$'\n'
+	for _VM in $(VBoxManage list vms|awk '{print $1}'|sed -e "s/\"//g")
+	do
+		_EXCLUDED=$(VBoxManage showvminfo ${_VM}|grep -c -i EXCLUDE)
+		_STATUS=$(VBoxManage showvminfo ${_VM}|grep -c running)
+		if [[ "${_STATUS}" == "0" && "${_EXCLUDED}" == "0" ]]; then
+			VBoxManage startvm ${_VM} --type headless
+		elif [[ "${_STATUS}" == "0" && "${_EXCLUDED}" == "1" ]]; then
+			echo "VM \"${_VM}\" excluded for bulk autostart."
+		else
+			echo "VM \"${_VM}\" already running."
+		fi
+	done
+	exit 0
+}
+
+stopcmd () {
+	IFS=$'\n'
+	for _VM in $(VBoxManage list runningvms|awk '{print $1}'|sed -e "s/\"//g")
+	do
+		VBoxManage controlvm ${_VM} acpipowerbutton
+	done
+
+	_COUNTDOWN=30
+	while :;
+	do
+		_RUNNINGVMS=$(VBoxManage list runningvms|wc -l|awk '{print $1}')
+		if [[ "${_RUNNINGVMS}" == "0" ]]; then
+			echo "All running VM gracefully shut down."
+			break
+		elif (( ${_RUNNINGVMS} >= 1 && ${_COUNTDOWN} >= 0 )); then
+			sleep 1s
+			((_COUNTDOWN-=1))
+		else	
+			echo "Timeout reached!!"
+			for _VM in $(VBoxManage list runningvms|awk '{print $1}'|sed -e "s/\"//g")
+			do
+				echo "Hard shutdown for ${_VM}"
+				VBoxManage controlvm ${_VM} poweroff
+			done
+			break
+		fi
+	done
+	exit 0
+}
+
+case "$1" in
+'start')
+	verifysmap
+        startcmd
+        ;;
+'stop')
+        stopcmd
+        ;;
+'restart')
+        stopcmd
+        sleep 1s
+	verifysmap
+        startcmd
+        ;;
+*)
+        echo "Usage: $0 { start | stop | restart }"
+        exit 1
+        ;;
+esac
